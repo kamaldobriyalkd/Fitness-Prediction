@@ -1,0 +1,134 @@
+---
+title: "Fitness Prediction"
+author: "Kamal Dobriyal"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project,the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+## Overview
+
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We train 4 models: Decision Tree, Random Forest, Gradient Boosted Trees, Support Vector Machine using k-folds cross validation on the training set. We then predict using a validation set randomly selected from the training csv data to obtain the accuracy and out of sample error rate. Based on those numbers, we decide on the best model, and use it to predict 20 cases using the test csv set.
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Loading the data sets and required libraries
+```{r message=FALSE,error=FALSE}
+library(caret)
+library(randomForest)
+library(rattle)
+set.seed(20112021) #to make this analysis reproducible
+
+
+training<-read.csv("pml-training.csv")
+testing<-read.csv("pml-testing.csv")
+```
+
+## Cleaning the training data set
+```{r}
+#removing first seven column as it is meta data
+training<-training[,-c(1:7)]
+
+#removing columns having mostly NA values
+training<-training[,colMeans(is.na(training))<0.9]
+
+#removing columns having values near to zero
+training<-training[,-nearZeroVar(training)]
+
+#dimension of the new training data set
+dim(training)
+```
+We will now move forward with the new training set only by splitting it into a
+training and **validation** data set
+
+```{r}
+inTrain<-createDataPartition(y=training$classe,p=0.7,list=FALSE)
+trainSet<-training[inTrain,]
+validSet<-training[-inTrain,]
+```
+
+## Creating prediction models and testing on validation set
+We will consider some intuitive and popular prediction models that are **Decision Trees**, **Random Forest**, **Gradient Boosted Trees**, and **SVM**
+
+### Descision Tree
+**Prediction Model**
+```{r}
+dtFit<-train(classe~.,data=trainSet, method="rpart",
+             trControl= trainControl(method = "cv", number = 3, verboseIter = F))
+fancyRpartPlot(dtFit$finalModel)
+```
+
+**Testing**
+```{r}
+dtPred<-predict(dtFit,validSet)
+dtCM<-confusionMatrix(dtPred,as.factor(validSet$classe))
+```
+
+### Random Forests
+**Prediction Model**
+```{r}
+rfFit<-train(classe~.,data=trainSet,method="rf",
+             trControl=trainControl(method="cv",number=3,verboseIter = F))
+```
+**Testing**
+```{r}
+rfPred<-predict(rfFit,validSet)
+rfCM<-confusionMatrix(rfPred,as.factor(validSet$classe))
+rfCM
+```
+
+### Gradient Boosted Trees
+**Prediction Model**
+```{r}
+gbtFit<-train(classe~.,data=trainSet,method="gbm",
+              trControl=trainControl(method = "cv", number = 3, verboseIter = F),
+              verbose=F)
+```
+**Testing**
+```{r}
+gbtPred<-predict(gbtFit,validSet)
+gbtCM<-confusionMatrix(gbtPred,as.factor(validSet$classe))
+gbtCM
+```
+
+### Support Vector Machine (SVM)
+**Prediction Model**
+```{r}
+svmFit<-train(classe~.,data=trainSet,method="svmLinear",
+              trControl=trainControl(method = "cv", number = 3, verboseIter = F),
+              verbose=F)
+```
+**Testing**
+```{r}
+svmPred<-predict(svmFit,validSet)
+svmCM<-confusionMatrix(svmPred,as.factor(validSet$classe))
+svmCM
+```
+
+## Conclusion
+```{r}
+data.frame(Model=c("Decision Trees","Random Forests","Gradient Boosted Trees", "Support Vector Machine"),
+           Accuracy=c(dtCM$overall[1],rfCM$overall[1],gbtCM$overall[1],svmCM$overall[1])*100,
+           Out.of.Sample.Error=100-c(dtCM$overall[1],rfCM$overall[1],gbtCM$overall[1],svmCM$overall[1])*100
+           )
+```
+As we can clearly see Random Forests algorithm shows the maximum accuracy i.e.,
+ `r rfCM$overall[1]` and lowest out of sample error i.e., `r 1-rfCM$overall[1]`.
+
+## Prediction on Test Set
+Predicting "classe" variable for the test set with **Random Forests** algorithm
+```{r}
+testPred<-predict(rfFit,testing)
+testPred
+```
